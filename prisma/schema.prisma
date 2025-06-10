@@ -43,18 +43,204 @@ model User {
   resetPasswordExpires DateTime?
 
   // Refresh token (for persistent login)
-  refreshToken         String?  @unique // Store the refresh token string
-  refreshTokenExpires  DateTime? // When this refresh token expires
+  refreshToken         String?  @unique
+  refreshTokenExpires  DateTime?
 
   // Activity tracking
   lastLoginAt DateTime?
 
-  // Relations (will be added later)
-  // posts     Post[]
-  // comments  Comment[]
-  // likes     Like[]
-  // followers Follow[] @relation("UserFollowers")
-  // following Follow[] @relation("UserFollowing")
+  // Relations
+  posts     Post[]
+  comments  Comment[]
+  likes     Like[]
+  savedPosts SavedPost[]
+  
+  // Follow relationships
+  followers Follow[] @relation("UserFollowers")
+  following Follow[] @relation("UserFollowing")
+  
+  // Chat relationships
+  conversationParticipants ConversationParticipant[]
+  sentMessages            Message[]
 
   @@map("users")
+}
+
+model Post {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Post content
+  content String @db.Text
+  
+  // Post images (stored as JSON array of image URLs)
+  images String[] @default([])
+
+  // Relations
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  // Post interactions
+  likes    Like[]
+  comments Comment[]
+  saves    SavedPost[]
+
+  // Indexes for performance
+  @@index([authorId])
+  @@index([createdAt])
+  @@map("posts")
+}
+
+// Follow relationship model
+model Follow {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  // The user who is following
+  followerId String
+  follower   User   @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+
+  // The user being followed
+  followingId String
+  following   User    @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  // Prevent duplicate follows
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+  @@map("follows")
+}
+
+// Like model for post likes
+model Like {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  // Relations
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  // Prevent duplicate likes
+  @@unique([userId, postId])
+  @@index([postId])
+  @@index([userId])
+  @@map("likes")
+}
+
+// Comment model for post comments
+model Comment {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Comment content
+  content String @db.Text
+
+  // Relations
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  // Indexes for performance
+  @@index([postId])
+  @@index([authorId])
+  @@index([createdAt])
+  @@map("comments")
+}
+
+// SavedPost model for saved posts feature
+model SavedPost {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  // Relations
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  // Prevent duplicate saves
+  @@unique([userId, postId])
+  @@index([userId])
+  @@index([postId])
+  @@map("saved_posts")
+}
+
+// Chat conversation model
+model Conversation {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Participants in the conversation
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  // Last message timestamp for sorting conversations
+  lastMessageAt DateTime @default(now())
+
+  @@index([lastMessageAt])
+  @@map("conversations")
+}
+
+// Conversation participants (many-to-many relationship)
+model ConversationParticipant {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  // Relations
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  // Prevent duplicate participants
+  @@unique([userId, conversationId])
+  @@index([userId])
+  @@index([conversationId])
+  @@map("conversation_participants")
+}
+
+// Message model for chat messages
+model Message {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Message content
+  content String @db.Text
+  
+  // Message type (text, image, etc.)
+  type MessageType @default(TEXT)
+
+  // Relations
+  senderId String
+  sender   User   @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  // Message status
+  isRead Boolean @default(false)
+
+  // Indexes for performance
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+// Enum for message types
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
 }
